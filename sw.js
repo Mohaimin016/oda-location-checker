@@ -1,5 +1,5 @@
 
-const CACHE_NAME = "oda-location-checker-v2";
+const CACHE_NAME = "oda-location-checker-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
