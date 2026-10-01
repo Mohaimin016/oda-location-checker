@@ -99,7 +99,7 @@ input:disabled{background:#f1f2f4;color:#8a919b;cursor:not-allowed}
 
     <div class="field">
       <label for="postal">2. Postal Code</label>
-      <input id="postal" inputmode="numeric" autocomplete="postal-code" placeholder="Enter postal code">
+      <input id="postal" type="text" inputmode="text" autocapitalize="characters" autocomplete="postal-code" spellcheck="false" placeholder="Enter postal code">
     </div>
 
     <div class="field">
@@ -150,10 +150,17 @@ function modeFor(country){
   return hasCity&&hasPostal?'both':hasPostal?'postal':hasCity?'city':'none';
 }
 function postalOK(postal,beg,end){
-  if(!trim(postal)) return false;
-  const p=Number(postal), b=Number(beg);
-  const e=trim(end)===''?b:Number(end);
-  return Number.isFinite(p)&&Number.isFinite(b)&&Number.isFinite(e)&&p>=b&&p<=e;
+  if(!trim(postal) || trim(beg)==='') return false;
+  const normalize = v => trim(v).toUpperCase().replace(/\\s+/g,'');
+  const pText = normalize(postal), bText = normalize(beg);
+  const eText = trim(end)==='' ? bText : normalize(end);
+  // Keep numeric postal ranges numeric; support alphanumeric postal codes such as "45E 13C".
+  if(/^\\d+$/.test(pText) && /^\\d+$/.test(bText) && /^\\d+$/.test(eText)){
+    const p=Number(pText), b=Number(bText), e=Number(eText);
+    return Number.isFinite(p)&&Number.isFinite(b)&&Number.isFinite(e)&&p>=b&&p<=e;
+  }
+  return pText.localeCompare(bText, undefined, {numeric:true, sensitivity:'base'}) >= 0 &&
+         pText.localeCompare(eText, undefined, {numeric:true, sensitivity:'base'}) <= 0;
 }
 function cityOK(city,name){
   return trim(city)!=='' && low(city)===low(name);
