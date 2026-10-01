@@ -253,7 +253,16 @@ $('country').addEventListener('input',()=>{
   if(!trim(q)) setStatus('wait','ODA Status','Enter a destination country.');
 });
 $('country').addEventListener('focus',showCountrySuggestions);
-$('postal').addEventListener('input',checkODA);
+$('postal').addEventListener('input',()=>{
+  const el=$('postal');
+  const start=el.selectionStart, end=el.selectionEnd;
+  const normalized=el.value.toUpperCase().replace(/\s+/g,'');
+  if(el.value!==normalized){
+    el.value=normalized;
+    try{el.setSelectionRange(Math.max(0,start-(el.value.length-(end-start))),Math.max(0,end-(el.value.length-(end-start))));}catch(e){}
+  }
+  checkODA();
+});
 $('city').addEventListener('input',()=>{showCitySuggestions();checkODA();});
 $('city').addEventListener('focus',showCitySuggestions);
 $('reset').addEventListener('click',()=>{
