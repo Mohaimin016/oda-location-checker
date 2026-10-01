@@ -255,11 +255,14 @@ $('country').addEventListener('input',()=>{
 $('country').addEventListener('focus',showCountrySuggestions);
 $('postal').addEventListener('input',()=>{
   const el=$('postal');
+  const original=el.value;
   const start=el.selectionStart, end=el.selectionEnd;
-  const normalized=el.value.toUpperCase().replace(/\s+/g,'');
-  if(el.value!==normalized){
+  const normalized=original.toUpperCase().replace(/\s+/g,'');
+  if(original!==normalized){
+    const cleanStart=original.slice(0,start).toUpperCase().replace(/\s+/g,'').length;
+    const cleanEnd=original.slice(0,end).toUpperCase().replace(/\s+/g,'').length;
     el.value=normalized;
-    try{el.setSelectionRange(Math.max(0,start-(el.value.length-(end-start))),Math.max(0,end-(el.value.length-(end-start))));}catch(e){}
+    try{el.setSelectionRange(cleanStart,cleanEnd);}catch(e){}
   }
   checkODA();
 });
