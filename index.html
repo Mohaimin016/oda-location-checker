@@ -253,6 +253,14 @@ $('country').addEventListener('input',()=>{
   if(!trim(q)) setStatus('wait','ODA Status','Enter a destination country.');
 });
 $('country').addEventListener('focus',showCountrySuggestions);
+// Hide the mobile keyboard when the user presses Enter/Done in the postal field.
+$('postal').addEventListener('keydown',event=>{
+  if(event.key==='Enter'){
+    event.preventDefault();
+    $('postal').blur();
+    checkODA();
+  }
+});
 $('postal').addEventListener('input',()=>{
   const el=$('postal');
   const original=el.value;
