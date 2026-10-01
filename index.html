@@ -151,11 +151,11 @@ function modeFor(country){
 }
 function postalOK(postal,beg,end){
   if(!trim(postal) || trim(beg)==='') return false;
-  const normalize = v => trim(v).toUpperCase().replace(/\\s+/g,'');
+  const normalize = v => trim(v).toUpperCase().replace(/\s+/g,'');
   const pText = normalize(postal), bText = normalize(beg);
   const eText = trim(end)==='' ? bText : normalize(end);
   // Keep numeric postal ranges numeric; support alphanumeric postal codes such as "45E 13C".
-  if(/^\\d+$/.test(pText) && /^\\d+$/.test(bText) && /^\\d+$/.test(eText)){
+  if(/^\d+$/.test(pText) && /^\d+$/.test(bText) && /^\d+$/.test(eText)){
     const p=Number(pText), b=Number(bText), e=Number(eText);
     return Number.isFinite(p)&&Number.isFinite(b)&&Number.isFinite(e)&&p>=b&&p<=e;
   }
