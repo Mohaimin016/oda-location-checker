@@ -147,7 +147,14 @@ function modeFor(country){
   const rows=rowsForCountry(country);
   const hasCity=rows.some(r=>trim(r[1])!=='');
   const hasPostal=rows.some(r=>trim(r[2])!==''||trim(r[3])!=='');
-  return hasCity&&hasPostal?'both':hasPostal?'postal':hasCity?'city':'none';
+  // A country is city-based only when it has city records but no postal-range data.
+  // If postal ranges exist, use postal mode unless the database also has separate
+  // city-only rows for that same country.
+  const hasCityOnlyRows=rows.some(r=>trim(r[1])!==''&&trim(r[2])===''&&trim(r[3])==='');
+  if(hasPostal&&hasCityOnlyRows) return 'both';
+  if(hasPostal) return 'postal';
+  if(hasCity) return 'city';
+  return 'none';
 }
 function postalOK(postal,beg,end){
   if(!trim(postal) || trim(beg)==='') return false;
