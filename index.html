@@ -27,7 +27,7 @@ input:disabled{background:#f1f2f4;color:#8a919b;cursor:not-allowed}
 .suggestions{position:absolute;z-index:20;left:0;right:0;top:78px;background:#fff;border:1px solid #d9dee6;border-radius:10px;box-shadow:0 12px 24px rgba(15,23,42,.15);max-height:230px;overflow:auto;display:none}
 .suggestion{padding:11px 13px;cursor:pointer;font-size:14px}
 .suggestion:hover,.suggestion.active{background:#f1f5f9}
-.status{margin-top:24px;border-radius:15px;padding:22px 24px;border:1px solid #d7dce3;background:#f8fafc;display:flex;align-items:center;justify-content:space-between;gap:15px}
+.status{position:sticky;top:8px;z-index:20;margin:0 0 16px;border-radius:15px;padding:14px 18px;border:1px solid #d7dce3;background:#f8fafc;display:flex;align-items:center;justify-content:space-between;gap:15px;box-shadow:0 4px 14px rgba(0,0,0,.06)}
 .status-left{display:flex;align-items:center;gap:13px}
 .dot{width:14px;height:14px;border-radius:50%;background:#98a2b3;flex:0 0 14px}
 .status-title{font-size:20px;font-weight:800}
@@ -90,6 +90,16 @@ input:disabled{background:#f1f2f4;color:#8a919b;cursor:not-allowed}
 
 <main class="wrap">
 <section class="card">
+  <div id="status" class="status wait">
+    <div class="status-left">
+      <span class="dot"></span>
+      <div>
+        <div id="statusTitle" class="status-title">ODA Status</div>
+        <div id="statusSub" class="status-sub">Enter a country and destination details to check.</div>
+      </div>
+    </div>
+  </div>
+
   <div class="grid">
     <div class="field full">
       <label for="country">1. Destination Country</label>
@@ -107,16 +117,6 @@ input:disabled{background:#f1f2f4;color:#8a919b;cursor:not-allowed}
       <input id="city" autocomplete="off" placeholder="Type city name">
       <div id="citySuggestions" class="suggestions"></div>
       <div id="cityHelp" class="help">Type any city. ODA city suggestions will appear when available.</div>
-    </div>
-  </div>
-
-  <div id="status" class="status wait">
-    <div class="status-left">
-      <span class="dot"></span>
-      <div>
-        <div id="statusTitle" class="status-title">ODA Status</div>
-        <div id="statusSub" class="status-sub">Enter a country and destination details to check.</div>
-      </div>
     </div>
   </div>
 
