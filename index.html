@@ -344,7 +344,10 @@ function postalForCountry(country,postal){
   const len=postalLenFor(country);
   if(len && /\d/.test(p)){
     const digits=p.replace(/\D/g,'');
-    return digits.length>len ? digits.slice(0,len) : digits;
+    // Shorten only for countries whose real codes are known to be longer than the list's
+    // (Japan 7 vs 5, Brazil 8 vs 5, U.S.A ZIP+4, Portugal 7 vs 4…). Elsewhere the code must match as typed.
+    const known=POSTAL_DIGITS[low(canonicalCountry(country))];
+    return (known && digits.length>len) ? digits.slice(0,len) : digits;
   }
   return p;
 }
