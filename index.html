@@ -63,6 +63,8 @@ input:disabled{background:#f1f2f4;color:#8a919b;cursor:not-allowed}
   .install-btn{font-size:12px;padding:8px 10px}
   .header-inner{padding-right:105px}
 }
+.offline-note{display:none;margin:0 0 14px;padding:10px 14px;border-radius:11px;background:#fff8e6;border:1px solid #f3d38b;color:#7a5a00;font-size:13px;line-height:1.45}
+body.is-offline .offline-note{display:block}
 .bulk{display:none}
 body.bulk-mode .bulk{display:block}
 body.bulk-mode #status,body.bulk-mode #singleView{display:none}
@@ -113,6 +115,7 @@ body.bulk-mode .wrap{padding-top:0}
       </div>
     </div>
   </div>
+<div class="offline-note" id="offlineNote"><b>You are offline.</b> Checks still work and give the same result: all ODA locations are saved on this device.</div>
 <section class="card" id="singleView">
 
   <div class="grid">
@@ -181,11 +184,11 @@ const COUNTRY_ALIASES = {
   'U.S.A': ['United States', 'United States of America', 'US', 'America'],
   'U.A.E': ['United Arab Emirates', 'AE', 'Emirates'],
   'Korea, South': ['South Korea', 'Korea', 'Republic of Korea', 'Korea Republic of', 'KR'],
-  'United Kingdom': ['UK', 'GB', 'Great Britain', 'England', 'Scotland', 'Wales', 'Northern Ireland', 'Isle of Man', 'IM'],
+  'United Kingdom': ['UK', 'GB', 'Great Britain', 'Great Britain (U.K.)', 'U.K.', 'England', 'Scotland', 'Wales', 'Northern Ireland', 'Isle of Man', 'IM'],
   'Russia': ['Russian Federation', 'RU'],
   'Vietnam': ['Viet Nam', 'VN'],
-  'Taiwan': ['Taiwan Province of China', 'Chinese Taipei', 'TW'],
-  'Hong Kong': ['Hong Kong SAR', 'Hong Kong SAR China', 'HK'],
+  'Taiwan': ['Taiwan, China', 'Taiwan Province of China', 'Chinese Taipei', 'TW'],
+  'Hong Kong': ['Hong Kong SAR, China', 'Hong Kong SAR', 'Hong Kong China', 'HK'],
   'Slovak Republic': ['Slovakia', 'SK'],
   'Bosnia-Herzegovina': ['Bosnia and Herzegovina', 'Bosnia', 'BA'],
   'Palestinian Territory': ['Palestine', 'State of Palestine', 'PS'],
@@ -195,7 +198,7 @@ const COUNTRY_ALIASES = {
   'Tanzania': ['United Republic of Tanzania', 'TZ'],
   'St. Lucia': ['Saint Lucia', 'LC'],
   'St. Vincent': ['Saint Vincent', 'Saint Vincent and the Grenadines', 'St Vincent and the Grenadines', 'VC'],
-  'Sint Maarten': ['Sint Maarten (Dutch part)', 'St Maarten', 'SX'],
+  'Sint Maarten': ['Sint Marteen', 'Sint Maarten (Dutch part)', 'St Maarten', 'SX'],
   'Saint Martin': ['Saint Martin (French part)', 'St Martin', 'MF'],
   'Antigua': ['Antigua and Barbuda', 'AG'],
   'Virgin Islands (U.S.)': ['US Virgin Islands', 'U.S. Virgin Islands', 'Virgin Islands US', 'VI'],
@@ -798,6 +801,15 @@ document.addEventListener('click',e=>{
       navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker registration failed:', err));
     });
   }
+})();
+</script>
+<script>
+/* Show a notice when the device has no internet (checks keep working). */
+(() => {
+  const update = () => document.body.classList.toggle('is-offline', navigator.onLine === false);
+  window.addEventListener('online', update);
+  window.addEventListener('offline', update);
+  update();
 })();
 </script>
 <script>

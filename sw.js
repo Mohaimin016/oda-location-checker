@@ -1,4 +1,4 @@
-const CACHE_NAME = "oda-location-checker-v15";
+const CACHE_NAME = "oda-location-checker-v16";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -38,11 +38,15 @@ self.addEventListener("fetch", event => {
 
   // The page itself: try the network first so updates show up right away,
   // fall back to the saved copy when offline.
+  // If the network is slow or flaky, stop waiting after 3 seconds and open the saved copy.
   if (event.request.mode === "navigate") {
+    const saved = () => caches.match(event.request, { ignoreSearch: true }).then(c => c || caches.match("./index.html"));
+    const network = fetch(event.request).then(response => putInCache(event.request, response));
+    const timeout = new Promise(resolve => setTimeout(resolve, 3000)).then(saved);
     event.respondWith(
-      fetch(event.request)
-        .then(response => putInCache(event.request, response))
-        .catch(() => caches.match(event.request).then(c => c || caches.match("./index.html")))
+      Promise.race([network.catch(saved), timeout.then(c => c || network)])
+        .then(r => r || network)
+        .catch(saved)
     );
     return;
   }
