@@ -14,7 +14,7 @@ body{margin:0;background:linear-gradient(180deg,#f5f0e7 0,#fbfaf6 100%);font-fam
 .logo span{color:#ff6a00}
 .header h1{margin:0;font-size:25px;line-height:1.2}
 .header p{margin:7px 0 0;color:#cbd5e1;font-size:14px}
-.wrap{max-width:1050px;margin:28px auto;padding:300px 18px 0}
+.wrap{max-width:1050px;margin:28px auto;padding:110px 18px 0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;box-shadow:0 10px 30px rgba(30,41,59,.07)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 .field{position:relative}
@@ -98,7 +98,7 @@ body.bulk-mode .wrap{padding-top:0}
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ODA Checker">
-<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 </head>
 <body>
 
@@ -175,15 +175,89 @@ const trim=v=>String(v??'').trim();
 const low=v=>trim(v).replace(/\s+/g,' ').toLowerCase();
 const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
+/* ---------- Country name matching (file names → ODA list names) ---------- */
+const ckey = v => String(v ?? '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
+const COUNTRY_ALIASES = {
+  'U.S.A': ['United States', 'United States of America', 'US', 'America'],
+  'U.A.E': ['United Arab Emirates', 'AE', 'Emirates'],
+  'Korea, South': ['South Korea', 'Korea', 'Republic of Korea', 'Korea Republic of', 'KR'],
+  'United Kingdom': ['UK', 'GB', 'Great Britain', 'England', 'Scotland', 'Wales', 'Northern Ireland', 'Isle of Man', 'IM'],
+  'Russia': ['Russian Federation', 'RU'],
+  'Vietnam': ['Viet Nam', 'VN'],
+  'Taiwan': ['Taiwan Province of China', 'Chinese Taipei', 'TW'],
+  'Hong Kong': ['Hong Kong SAR', 'Hong Kong SAR China', 'HK'],
+  'Slovak Republic': ['Slovakia', 'SK'],
+  'Bosnia-Herzegovina': ['Bosnia and Herzegovina', 'Bosnia', 'BA'],
+  'Palestinian Territory': ['Palestine', 'State of Palestine', 'PS'],
+  'Moldova': ['Republic of Moldova', 'MD'],
+  'Bolivia': ['Plurinational State of Bolivia', 'BO'],
+  'Venezuela': ['Bolivarian Republic of Venezuela', 'VE'],
+  'Tanzania': ['United Republic of Tanzania', 'TZ'],
+  'St. Lucia': ['Saint Lucia', 'LC'],
+  'St. Vincent': ['Saint Vincent', 'Saint Vincent and the Grenadines', 'St Vincent and the Grenadines', 'VC'],
+  'Sint Maarten': ['Sint Maarten (Dutch part)', 'St Maarten', 'SX'],
+  'Saint Martin': ['Saint Martin (French part)', 'St Martin', 'MF'],
+  'Antigua': ['Antigua and Barbuda', 'AG'],
+  'Virgin Islands (U.S.)': ['US Virgin Islands', 'U.S. Virgin Islands', 'Virgin Islands US', 'VI'],
+  'British Virgin Islands': ['Virgin Islands British', 'BVI', 'VG'],
+  'Bonaire, Sint - Eustatius and Saba': ['Bonaire', 'Bonaire Sint Eustatius and Saba', 'Caribbean Netherlands', 'BQ'],
+  'Curacao': ['Curaçao', 'CW'],
+  'Turks and Caicos Islands': ['Turks and Caicos', 'TC'],
+  'Trinidad and Tobago': ['Trinidad', 'TT'],
+  'Netherlands': ['Holland', 'The Netherlands', 'NL'],
+  'Czech Republic': ['Czechia', 'CZ'],
+  'Faroe Islands': ['Faroes', 'FO'],
+  'Papua New Guinea': ['PNG', 'PG'],
+  'Cook Islands': ['CK'], 'Cayman Islands': ['KY'], 'Bahamas': ['The Bahamas', 'BS'],
+  'Albania':['AL'],'Andorra':['AD'],'Argentina':['AR'],'Australia':['AU'],'Azerbaijan':['AZ'],'Bahrain':['BH'],
+  'Belarus':['BY'],'Belize':['BZ'],'Brazil':['BR'],'Bulgaria':['BG'],'Cambodia':['KH'],'Canada':['CA'],'Chile':['CL'],
+  'China':['CN','Peoples Republic of China'],'Colombia':['CO'],'Costa Rica':['CR'],'Croatia':['HR'],'Denmark':['DK'],
+  'Dominica':['DM'],'Dominican Republic':['DO'],'Ecuador':['EC'],'El Salvador':['SV'],'French Guiana':['GF'],
+  'French Polynesia':['PF'],'Georgia':['GE'],'Germany':['DE'],'Greece':['GR'],'Greenland':['GL'],'Grenada':['GD'],
+  'Guadeloupe':['GP'],'Guyana':['GY'],'Haiti':['HT'],'Honduras':['HN'],'India':['IN'],'Indonesia':['ID'],'Ireland':['IE'],
+  'Israel':['IL'],'Italy':['IT'],'Jamaica':['JM'],'Japan':['JP'],'Kazakhstan':['KZ'],'Kuwait':['KW'],'Malaysia':['MY'],
+  'Malta':['MT'],'Martinique':['MQ'],'Mexico':['MX'],'Montenegro':['ME'],'Netherlands Antilles':['AN'],
+  'New Caledonia':['NC'],'New Zealand':['NZ'],'Nicaragua':['NI'],'Oman':['OM'],'Panama':['PA'],'Paraguay':['PY'],
+  'Peru':['PE'],'Philippines':['PH'],'Portugal':['PT'],'Qatar':['QA'],'Romania':['RO'],'Serbia':['RS'],
+  'South Africa':['ZA'],'Spain':['ES'],'Suriname':['SR'],'Sweden':['SE'],'Switzerland':['CH'],'Thailand':['TH'],
+  'Ukraine':['UA'],'Uzbekistan':['UZ'],'Vanuatu':['VU'],'Zambia':['ZM'],'Fiji':['FJ'],'France':['FR']
+};
+const COUNTRY_INDEX = {};
+ODA_COUNTRIES.forEach(c => { COUNTRY_INDEX[ckey(c)] = c; });
+Object.entries(COUNTRY_ALIASES).forEach(([c, list]) => {
+  if (!ODA_COUNTRIES.includes(c)) return;
+  list.forEach(a => { const k = ckey(a); if (!(k in COUNTRY_INDEX)) COUNTRY_INDEX[k] = c; });
+});
+
+// Index the ODA list by country once, instead of scanning all rows on every keystroke.
+const ODA_BY_COUNTRY=new Map();
+ODA.slice(2).forEach(r=>{
+  if(r[0]==null) return;
+  const k=low(r[0]);
+  if(!ODA_BY_COUNTRY.has(k)) ODA_BY_COUNTRY.set(k,[]);
+  ODA_BY_COUNTRY.get(k).push(r);
+});
+Object.keys(ZONES).forEach(z=>{ const k=ckey(z); if(!(k in COUNTRY_INDEX)) COUNTRY_INDEX[k]=z; });
+
+// Accepts list names, common names and 2-letter codes: "USA", "United States", "US" -> "U.S.A".
 function canonicalCountry(v){
-  const q=low(v);
-  return ODA_COUNTRIES.find(c=>low(c)===q)||Object.keys(ZONES).find(c=>low(c)===q)||trim(v);
+  return COUNTRY_INDEX[ckey(v)]||trim(v);
 }
 function rowsForCountry(country){
-  const c=canonicalCountry(country);
-  return ODA.filter(r=>r[0]!=null && low(r[0])===low(c));
+  return ODA_BY_COUNTRY.get(low(canonicalCountry(country)))||[];
 }
+// A country we know (has a FedEx zone) but with no ODA locations at all.
+function isKnownNonOdaCountry(country){
+  const c=canonicalCountry(country);
+  return !rowsForCountry(c).length && Object.keys(ZONES).some(z=>low(z)===low(c));
+}
+const _modeCache={};
 function modeFor(country){
+  const key=low(canonicalCountry(country));
+  if(key in _modeCache) return _modeCache[key];
+  return (_modeCache[key]=computeMode(country));
+}
+function computeMode(country){
   const rows=rowsForCountry(country);
   const hasCity=rows.some(r=>trim(r[1])!=='');
   const hasPostal=rows.some(r=>trim(r[2])!==''||trim(r[3])!=='');
@@ -195,19 +269,6 @@ function modeFor(country){
   if(hasPostal) return 'postal';
   if(hasCity) return 'city';
   return 'none';
-}
-function postalOK(postal,beg,end){
-  if(!trim(postal) || trim(beg)==='') return false;
-  const normalize = v => trim(v).toUpperCase().replace(/\s+/g,'');
-  const pText = normalize(postal), bText = normalize(beg);
-  const eText = trim(end)==='' ? bText : normalize(end);
-  // Keep numeric postal ranges numeric; support alphanumeric postal codes such as "45E 13C".
-  if(/^\d+$/.test(pText) && /^\d+$/.test(bText) && /^\d+$/.test(eText)){
-    const p=Number(pText), b=Number(bText), e=Number(eText);
-    return Number.isFinite(p)&&Number.isFinite(b)&&Number.isFinite(e)&&p>=b&&p<=e;
-  }
-  return pText.localeCompare(bText, undefined, {numeric:true, sensitivity:'base'}) >= 0 &&
-         pText.localeCompare(eText, undefined, {numeric:true, sensitivity:'base'}) <= 0;
 }
 // Some ODA lists store only the leading digits of a postal code (e.g. 5 digits for
 // Japan/Brazil, 5-digit ZIP for U.S.A). Trim longer all-digit inputs such as
@@ -229,16 +290,51 @@ function postalLenFor(country){
 }
 function postalForCountry(country,postal){
   const p=trim(postal).toUpperCase().replace(/\s+/g,'');
+  // United Kingdom list holds outward codes padded with "X" (HS1X = HS1, IV10 = IV10).
+  // Turn a full postcode like "HS1 2AB" / "IV10 8AB" into that form.
+  if(low(canonicalCountry(country))==='united kingdom'){
+    let out=p.replace(/[^A-Z0-9]/g,'');
+    if(out.length>=5 && /\d[A-Z]{2}$/.test(out)) out=out.slice(0,-3);
+    return out.length<4 ? out.padEnd(4,'X') : out;
+  }
+  // Countries whose list is all digits: keep only the digits ("1797 AB" -> 1797,
+  // "77023-000" -> 77023, "SE-904 10" -> 90410) and trim to the length the list uses.
   const len=postalLenFor(country);
-  if(len && /^\d+(-\d+)?$/.test(p)){
-    const digits=p.replace('-','');
-    if(digits.length>len) return digits.slice(0,len);
-    return p.includes('-') ? digits : p;
+  if(len && /\d/.test(p)){
+    const digits=p.replace(/\D/g,'');
+    return digits.length>len ? digits.slice(0,len) : digits;
   }
   return p;
 }
-function cityOK(city,name){
-  return trim(city)!=='' && low(city)===low(name);
+// City names: ignore case, accents, punctuation and extra spaces ("São Paulo" = "SAO PAULO", "St. John's" = "St Johns").
+const cityKey=v=>trim(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/['’`.]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+// Pre-computed, per-country lookups (built on first use) so checks stay fast even for
+// bulk files with 100k+ rows. Postal: numeric ranges compare as numbers, others
+// (Canada "A5A0A0"–"A5A9Z9", UK "HS1X") compare as text with numbers inside.
+const _collator=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'});
+const _pnorm=v=>trim(v).toUpperCase().replace(/\s+/g,'');
+const _matchers={};
+function matcherFor(country){
+  const k=low(canonicalCountry(country));
+  if(_matchers[k]) return _matchers[k];
+  const rows=rowsForCountry(country);
+  const cities=new Set(rows.filter(r=>trim(r[1])!=='').map(r=>cityKey(r[1])));
+  const ranges=rows.filter(r=>trim(r[2])!=='').map(r=>{
+    const bt=_pnorm(r[2]), et=trim(r[3])===''?bt:_pnorm(r[3]);
+    const num=/^\d+$/.test(bt)&&/^\d+$/.test(et);
+    return {bt,et,num,bn:Number(bt),en:Number(et)};
+  });
+  return (_matchers[k]={cities,ranges});
+}
+function postalMatch(country,postal){
+  const p=_pnorm(postal); if(!p) return false;
+  const pnum=/^\d+$/.test(p), pn=Number(p);
+  return matcherFor(country).ranges.some(r=> (r.num&&pnum)
+    ? (pn>=r.bn&&pn<=r.en)
+    : (_collator.compare(p,r.bt)>=0&&_collator.compare(p,r.et)<=0));
+}
+function cityMatch(country,city){
+  return trim(city)!=='' && matcherFor(country).cities.has(cityKey(city));
 }
 
 let selectedCountry='';
@@ -263,23 +359,27 @@ function checkODA(){
   const country=canonicalCountry($('country').value);
   const postal=postalForCountry(country,$('postal').value);
   const city=trim($('city').value);
-  if(!country || !rowsForCountry(country).length){ selectedCountry=''; setStatus('wait','ODA Status','Select a destination country.'); return; }
+  if(!trim(country)){ selectedCountry=''; setStatus('wait','ODA Status','Enter a destination country.'); return; }
+  if(!rowsForCountry(country).length){
+    selectedCountry='';
+    if(isKnownNonOdaCountry(country)) setStatus('notfound','Not ODA Area',country+' has no ODA locations.');
+    else setStatus('wait','ODA Status','Select a destination country from the list.');
+    return;
+  }
   selectedCountry=country;
   const mode=modeFor(country);
-  const rows=rowsForCountry(country);
-  let matches=[];
+  let found=false;
   if(mode==='postal'){
     if(!postal){ setStatus('wait','ODA Status','Enter a postal code to check this country.'); return; }
-    matches=rows.filter(r=>postalOK(postal,r[2],r[3]));
+    found=postalMatch(country,postal);
   } else if(mode==='city'){
     if(!city){ setStatus('wait','ODA Status','Enter a city to check this country.'); return; }
-    matches=rows.filter(r=>cityOK(city,r[1]));
+    found=cityMatch(country,city);
   } else if(mode==='both'){
-    if(postal) matches=rows.filter(r=>postalOK(postal,r[2],r[3]));
-    else if(city) matches=rows.filter(r=>cityOK(city,r[1]));
-    else{ setStatus('wait','ODA Status','Enter a postal code or city.'); return; }
+    if(!postal && !city){ setStatus('wait','ODA Status','Enter a postal code or city.'); return; }
+    found=postalMatch(country,postal)||cityMatch(country,city);
   }
-  if(matches.length){
+  if(found){
     setStatus('found','ODA location found','The entered destination matches an ODA location.');
   } else {
     setStatus('notfound','Not ODA Area','No matching ODA location was found for the entered destination.');
@@ -289,7 +389,12 @@ function showCountrySuggestions(){
   const q=low($('country').value);
   const box=$('countrySuggestions');
   if(!q){box.style.display='none';box.innerHTML='';return;}
-  const list=ODA_COUNTRIES.filter(c=>low(c).includes(q)).slice(0,12);
+  const list=ODA_COUNTRIES.filter(c=>low(c).includes(q));
+  const alias=COUNTRY_INDEX[ckey(q)];
+  if(alias && ODA_COUNTRIES.includes(alias) && !list.includes(alias)) list.unshift(alias);
+  list.splice(12);
+  // Nothing to suggest when the typed name already is the only match
+  if(list.length===1 && low(list[0])===q){ box.style.display='none'; box.innerHTML=''; return; }
   box.innerHTML=list.map(c=>`<div class="suggestion" data-value="${esc(c)}">${esc(c)}</div>`).join('');
   box.style.display=list.length?'block':'none';
   box.querySelectorAll('.suggestion').forEach(el=>el.onclick=()=>{
@@ -319,16 +424,21 @@ function showCitySuggestions(){
 
 $('country').addEventListener('input',()=>{
   const q=$('country').value;
-  if(low(q)!==low(selectedCountry)){
-    selectedCountry='';
+  const c=canonicalCountry(q);
+  // 2-letter codes (IN, CA…) only count once the user stops at 2 letters and checks; avoid jumping while typing
+  const next=(ckey(q).length>2 || ODA_COUNTRIES.some(x=>low(x)===low(q))) && rowsForCountry(c).length?c:'';
+  if(low(next)!==low(selectedCountry)){
+    selectedCountry=next;
     $('postal').value=''; $('city').value='';
   }
   showCountrySuggestions();
   updateFields();
-  if(!trim(q)) setStatus('wait','ODA Status','Enter a destination country.');
+  checkODA();
 });
 $('country').addEventListener('focus',showCountrySuggestions);
 // Hide the mobile keyboard when the user presses Enter/Done in the postal field.
+$('postal').addEventListener('focus',()=>{$('countrySuggestions').style.display='none';});
+$('city').addEventListener('focus',()=>{$('countrySuggestions').style.display='none';});
 $('postal').addEventListener('keydown',event=>{
   if(event.key==='Enter'){
     event.preventDefault();
@@ -373,72 +483,18 @@ document.addEventListener('click',e=>{
 (() => {
   const STATUS_HEADER = 'ODA Location';
 
-  /* ---------- Country name matching (file names → ODA list names) ---------- */
-  const ckey = v => String(v ?? '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
-  const COUNTRY_ALIASES = {
-    'U.S.A': ['United States', 'United States of America', 'US', 'America'],
-    'U.A.E': ['United Arab Emirates', 'AE', 'Emirates'],
-    'Korea, South': ['South Korea', 'Korea', 'Republic of Korea', 'Korea Republic of', 'KR'],
-    'United Kingdom': ['UK', 'GB', 'Great Britain', 'England', 'Scotland', 'Wales', 'Northern Ireland'],
-    'Russia': ['Russian Federation', 'RU'],
-    'Vietnam': ['Viet Nam', 'VN'],
-    'Taiwan': ['Taiwan Province of China', 'Chinese Taipei', 'TW'],
-    'Hong Kong': ['Hong Kong SAR', 'Hong Kong SAR China', 'HK'],
-    'Slovak Republic': ['Slovakia', 'SK'],
-    'Bosnia-Herzegovina': ['Bosnia and Herzegovina', 'Bosnia', 'BA'],
-    'Palestinian Territory': ['Palestine', 'State of Palestine', 'PS'],
-    'Moldova': ['Republic of Moldova', 'MD'],
-    'Bolivia': ['Plurinational State of Bolivia', 'BO'],
-    'Venezuela': ['Bolivarian Republic of Venezuela', 'VE'],
-    'Tanzania': ['United Republic of Tanzania', 'TZ'],
-    'St. Lucia': ['Saint Lucia', 'LC'],
-    'St. Vincent': ['Saint Vincent', 'Saint Vincent and the Grenadines', 'St Vincent and the Grenadines', 'VC'],
-    'Sint Maarten': ['Sint Maarten (Dutch part)', 'St Maarten', 'SX'],
-    'Saint Martin': ['Saint Martin (French part)', 'St Martin', 'MF'],
-    'Antigua': ['Antigua and Barbuda', 'AG'],
-    'Virgin Islands (U.S.)': ['US Virgin Islands', 'U.S. Virgin Islands', 'Virgin Islands US', 'VI'],
-    'British Virgin Islands': ['Virgin Islands British', 'BVI', 'VG'],
-    'Bonaire, Sint - Eustatius and Saba': ['Bonaire', 'Bonaire Sint Eustatius and Saba', 'Caribbean Netherlands', 'BQ'],
-    'Curacao': ['Curaçao', 'CW'],
-    'Turks and Caicos Islands': ['Turks and Caicos', 'TC'],
-    'Trinidad and Tobago': ['Trinidad', 'TT'],
-    'Netherlands': ['Holland', 'The Netherlands', 'NL'],
-    'Czech Republic': ['Czechia', 'CZ'],
-    'Faroe Islands': ['Faroes', 'FO'],
-    'Papua New Guinea': ['PNG', 'PG'],
-    'Cook Islands': ['CK'], 'Cayman Islands': ['KY'], 'Bahamas': ['The Bahamas', 'BS'],
-    'Albania':['AL'],'Andorra':['AD'],'Argentina':['AR'],'Australia':['AU'],'Azerbaijan':['AZ'],'Bahrain':['BH'],
-    'Belarus':['BY'],'Belize':['BZ'],'Brazil':['BR'],'Bulgaria':['BG'],'Cambodia':['KH'],'Canada':['CA'],'Chile':['CL'],
-    'China':['CN','Peoples Republic of China'],'Colombia':['CO'],'Costa Rica':['CR'],'Croatia':['HR'],'Denmark':['DK'],
-    'Dominica':['DM'],'Dominican Republic':['DO'],'Ecuador':['EC'],'El Salvador':['SV'],'French Guiana':['GF'],
-    'French Polynesia':['PF'],'Georgia':['GE'],'Germany':['DE'],'Greece':['GR'],'Greenland':['GL'],'Grenada':['GD'],
-    'Guadeloupe':['GP'],'Guyana':['GY'],'Haiti':['HT'],'Honduras':['HN'],'India':['IN'],'Indonesia':['ID'],'Ireland':['IE'],
-    'Israel':['IL'],'Italy':['IT'],'Jamaica':['JM'],'Japan':['JP'],'Kazakhstan':['KZ'],'Kuwait':['KW'],'Malaysia':['MY'],
-    'Malta':['MT'],'Martinique':['MQ'],'Mexico':['MX'],'Montenegro':['ME'],'Netherlands Antilles':['AN'],
-    'New Caledonia':['NC'],'New Zealand':['NZ'],'Nicaragua':['NI'],'Oman':['OM'],'Panama':['PA'],'Paraguay':['PY'],
-    'Peru':['PE'],'Philippines':['PH'],'Portugal':['PT'],'Qatar':['QA'],'Romania':['RO'],'Serbia':['RS'],
-    'South Africa':['ZA'],'Spain':['ES'],'Suriname':['SR'],'Sweden':['SE'],'Switzerland':['CH'],'Thailand':['TH'],
-    'Ukraine':['UA'],'Uzbekistan':['UZ'],'Vanuatu':['VU'],'Zambia':['ZM'],'Fiji':['FJ'],'France':['FR']
-  };
-  const COUNTRY_INDEX = {};
-  ODA_COUNTRIES.forEach(c => { COUNTRY_INDEX[ckey(c)] = c; });
-  Object.entries(COUNTRY_ALIASES).forEach(([c, list]) => {
-    if (!ODA_COUNTRIES.includes(c)) return;
-    list.forEach(a => { const k = ckey(a); if (!(k in COUNTRY_INDEX)) COUNTRY_INDEX[k] = c; });
-  });
-  const odaCountry = v => COUNTRY_INDEX[ckey(v)] || '';
+  const odaCountry = v => { const c = canonicalCountry(v); return rowsForCountry(c).length ? c : ''; };
 
   /* ---------- ODA decision for one shipment ---------- */
   function odaStatus(countryRaw, postalRaw, cityRaw) {
     const country = odaCountry(countryRaw);
     if (!trim(countryRaw)) return 'No data';
     if (!country) return 'No';                       // country has no ODA areas at all
-    const rows = rowsForCountry(country);
     const mode = modeFor(country);
     const postal = postalForCountry(country, postalRaw);
     const city = trim(cityRaw);
-    const byPostal = () => !!postal && rows.some(r => postalOK(postal, r[2], r[3]));
-    const byCity = () => !!city && rows.some(r => cityOK(city, r[1]));
+    const byPostal = () => postalMatch(country, postal);
+    const byCity = () => cityMatch(country, city);
     if (mode === 'postal') return !postal ? 'No data' : (byPostal() ? 'Yes' : 'No');
     if (mode === 'city') return !city ? 'No data' : (byCity() ? 'Yes' : 'No');
     if (mode === 'both') return (!postal && !city) ? 'No data' : ((byPostal() || byCity()) ? 'Yes' : 'No');
@@ -575,8 +631,8 @@ document.addEventListener('click',e=>{
   const colName = i => { let s = ''; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
 
   function buildXlsx(rows, statusCol) {
-    const width = Math.max(...rows.map(r => r.length));
-    const widths = Array.from({ length: width }, (_, c) => Math.min(45, Math.max(10, ...rows.slice(0, 500).map(r => String(r[c] ?? '').length + 2))));
+    const width = rows.reduce((m, r) => Math.max(m, r.length), 0);
+    const widths = Array.from({ length: width }, (_, c) => Math.min(45, rows.slice(0, 500).reduce((m, r) => Math.max(m, String(r[c] ?? '').length + 2), 10)));
     const sheetRows = rows.map((r, ri) => {
       const cells = r.map((v, ci) => {
         if (v === '' || v == null) return '';
@@ -655,8 +711,11 @@ document.addEventListener('click',e=>{
       const isCsv = /\.csv$/i.test(currentFile.name) || currentFile.type === 'text/csv';
       if (!isCsv && !/\.xlsx$/i.test(currentFile.name)) throw new Error('Please upload an .xlsx or .csv file. (Old .xls files: open in Excel and “Save As” .xlsx first.)');
       let rows = isCsv ? readCsv(await currentFile.text()) : await readXlsx(await currentFile.arrayBuffer());
-      rows = rows.filter(r => r.some(v => trim(v) !== ''));
+      const isBlank = r => !r || !r.some(v => trim(v) !== '');
+      while (rows.length && isBlank(rows[rows.length - 1])) rows.pop();   // drop trailing empty rows only
+      while (rows.length && isBlank(rows[0])) rows.shift();                // heading may start below empty rows
       if (rows.length < 2) throw new Error('The file has no data rows under the heading row.');
+      const maxLen = rows.reduce((m, r) => Math.max(m, (r || []).length), 0);
       const header = rows[0];
       const cols = detectColumns(header);
       const fallbackCountry = canonicalCountry($('country').value);
@@ -665,13 +724,18 @@ document.addEventListener('click',e=>{
       if (cols.postal < 0 && cols.city < 0) throw new Error('No “Postal Code” or “City” column found. The first row needs headings like Country, Postal Code, City.');
 
       let statusCol = header.findIndex(h => low(h) === low(STATUS_HEADER));
-      if (statusCol < 0) statusCol = Math.max(...rows.map(r => r.length));
-      const width = Math.max(statusCol + 1, ...rows.map(r => r.length));
+      if (statusCol < 0) statusCol = maxLen;
+      const width = Math.max(statusCol + 1, maxLen);
       let yes = 0, no = 0, missing = 0;
+      const seen = new Map();
       const out = rows.map((r, i) => {
-        const row = Array.from({ length: width }, (_, c) => r[c] ?? '');
+        const row = Array.from({ length: width }, (_, c) => (r || [])[c] ?? '');
         if (i === 0) { row[statusCol] = STATUS_HEADER; return row; }
-        const st = odaStatus(useFallback ? fallbackCountry : row[cols.country], cols.postal >= 0 ? row[cols.postal] : '', cols.city >= 0 ? row[cols.city] : '');
+        if (isBlank(r)) return row;                                        // keep empty rows empty
+        const args = [useFallback ? fallbackCountry : row[cols.country], cols.postal >= 0 ? row[cols.postal] : '', cols.city >= 0 ? row[cols.city] : ''];
+        const key = args.map(v => String(v ?? '')).join('\u0001');
+        let st = seen.get(key);
+        if (st === undefined) { st = odaStatus(...args); seen.set(key, st); }
         if (st === 'Yes') yes++; else if (st === 'No') no++; else missing++;
         row[statusCol] = st;
         return row;

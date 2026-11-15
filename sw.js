@@ -1,5 +1,4 @@
-
-const CACHE_NAME = "oda-location-checker-v13";
+const CACHE_NAME = "oda-location-checker-v15";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -26,13 +25,30 @@ self.addEventListener("activate", event => {
   );
 });
 
+const putInCache = (request, response) => {
+  if (response && response.ok && new URL(request.url).origin === self.location.origin) {
+    const copy = response.clone();
+    caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+  }
+  return response;
+};
+
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
+
+  // The page itself: try the network first so updates show up right away,
+  // fall back to the saved copy when offline.
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => putInCache(event.request, response))
+        .catch(() => caches.match(event.request).then(c => c || caches.match("./index.html")))
+    );
+    return;
+  }
+
+  // Icons, manifest, etc.: saved copy first, network as backup.
   event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-      const copy = response.clone();
-      caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
-      return response;
-    }).catch(() => caches.match("./index.html")))
+    caches.match(event.request).then(cached => cached || fetch(event.request).then(response => putInCache(event.request, response)))
   );
 });
