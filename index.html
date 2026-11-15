@@ -63,6 +63,33 @@ input:disabled{background:#f1f2f4;color:#8a919b;cursor:not-allowed}
   .install-btn{font-size:12px;padding:8px 10px}
   .header-inner{padding-right:105px}
 }
+.bulk{display:none}
+body.bulk-mode .bulk{display:block}
+body.bulk-mode #status,body.bulk-mode #singleView{display:none}
+body.bulk-mode .wrap{padding-top:0}
+.bulk-open{width:100%;flex:none;margin-top:12px;letter-spacing:.3px}
+.back{display:inline-flex;align-items:center;gap:6px;margin:0 0 16px;border:0;background:#eef1f4;color:#26364c;border-radius:10px;padding:9px 14px;font-weight:700;font-size:14px;cursor:pointer}
+.back:hover{background:#e3e7eb}
+.bulk h2{margin:0 0 6px;font-size:19px;color:#0b1530}
+.bulk .lead{margin:0 0 16px;font-size:13px;color:var(--muted);line-height:1.5}
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:2px dashed #cfd5dd;border-radius:14px;background:#fff;padding:22px 14px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:#c9a84c;background:#fffbef}
+.drop strong{font-size:15px;color:#22324a}
+.drop span{font-size:12px;color:var(--muted)}
+.drop input{display:none}
+.bulk-actions{display:flex;gap:10px;margin-top:14px}
+.btn{flex:1;height:46px;border:0;border-radius:10px;font-weight:750;font-size:15px;cursor:pointer}
+.btn.primary{background:#4d148c;color:#fff}
+.btn.primary:hover{background:#3e0f73}
+.btn.primary:disabled{background:#c8c2d3;cursor:not-allowed}
+.btn.ghost{background:#eef1f4;color:#26364c;flex:0 0 120px}
+.bulk-msg{margin-top:12px;font-size:13px;line-height:1.5;color:#22324a;min-height:20px}
+.bulk-msg.err{color:var(--red)}
+.bulk-summary{display:none;gap:10px;margin-top:12px}
+.pill{flex:1;border-radius:11px;padding:10px 12px;text-align:center;font-size:12px;color:var(--muted);background:#f6f7f9;border:1px solid #e4e7ec}
+.pill b{display:block;font-size:20px;color:#172033}
+.pill.yes{background:var(--greenbg);border-color:#a6e3c4}.pill.yes b{color:var(--green)}
+.pill.no{background:var(--redbg);border-color:#f1aaa5}.pill.no b{color:var(--red)}
 </style>
 
 <link rel="manifest" href="manifest.webmanifest">
@@ -86,7 +113,7 @@ input:disabled{background:#f1f2f4;color:#8a919b;cursor:not-allowed}
       </div>
     </div>
   </div>
-<section class="card">
+<section class="card" id="singleView">
 
   <div class="grid">
     <div class="field full">
@@ -109,7 +136,30 @@ input:disabled{background:#f1f2f4;color:#8a919b;cursor:not-allowed}
   </div>
 
   <button id="reset" class="reset" type="button">Reset</button>
+  <button id="openBulk" class="btn primary bulk-open" type="button">BULK Checker</button>
   <div class="note">All data are confidential, Do not share with Competitors</div>
+</section>
+
+<section class="card bulk" id="bulk">
+  <button id="bulkBack" class="back" type="button">&larr; Back to ODA Checker</button>
+  <h2>Bulk ODA Check</h2>
+  <p class="lead">Upload an Excel (.xlsx) or CSV file with tracking numbers and their destination <b>Country</b>, <b>Postal Code</b> and <b>City</b> columns. You'll get the same file back as Excel with an extra <b>ODA Location</b> column showing Yes or No for every row.</p>
+  <label class="drop" id="bulkDrop">
+    <input id="bulkFile" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv">
+    <strong id="bulkFileName">Tap to choose a file, or drop it here</strong>
+    <span>.xlsx or .csv · first row must be the column headings</span>
+  </label>
+  <div class="bulk-actions">
+    <button id="bulkRun" class="btn primary" type="button" disabled>Check &amp; Download Excel</button>
+    <button id="bulkClear" class="btn ghost" type="button">Clear</button>
+  </div>
+  <div id="bulkMsg" class="bulk-msg"></div>
+  <div id="bulkSummary" class="bulk-summary">
+    <div class="pill"><b id="sumTotal">0</b>Rows checked</div>
+    <div class="pill yes"><b id="sumYes">0</b>ODA: Yes</div>
+    <div class="pill no"><b id="sumNo">0</b>ODA: No</div>
+  </div>
+  <div class="note">Files are processed on your device only. Nothing is uploaded to any server.</div>
 </section>
 </main>
 
@@ -159,6 +209,34 @@ function postalOK(postal,beg,end){
   return pText.localeCompare(bText, undefined, {numeric:true, sensitivity:'base'}) >= 0 &&
          pText.localeCompare(eText, undefined, {numeric:true, sensitivity:'base'}) <= 0;
 }
+// Some ODA lists store only the leading digits of a postal code (e.g. 5 digits for
+// Japan/Brazil, 5-digit ZIP for U.S.A). Trim longer all-digit inputs such as
+// "520-3301", "77023-000" or ZIP+4 "07102-1234" to the length the data uses.
+const _postalLen={};
+function postalLenFor(country){
+  const k=low(country);
+  if(!(k in _postalLen)){
+    let max=0, allDigits=true, any=false;
+    rowsForCountry(country).forEach(r=>{
+      [r[2],r[3]].forEach(v=>{
+        const t=trim(v); if(!t) return; any=true;
+        if(/^\d+$/.test(t)) max=Math.max(max,t.length); else allDigits=false;
+      });
+    });
+    _postalLen[k]=(any&&allDigits)?max:0;
+  }
+  return _postalLen[k];
+}
+function postalForCountry(country,postal){
+  const p=trim(postal).toUpperCase().replace(/\s+/g,'');
+  const len=postalLenFor(country);
+  if(len && /^\d+(-\d+)?$/.test(p)){
+    const digits=p.replace('-','');
+    if(digits.length>len) return digits.slice(0,len);
+    return p.includes('-') ? digits : p;
+  }
+  return p;
+}
 function cityOK(city,name){
   return trim(city)!=='' && low(city)===low(name);
 }
@@ -183,7 +261,7 @@ function updateFields(){
 }
 function checkODA(){
   const country=canonicalCountry($('country').value);
-  const postal=trim($('postal').value);
+  const postal=postalForCountry(country,$('postal').value);
   const city=trim($('city').value);
   if(!country || !rowsForCountry(country).length){ selectedCountry=''; setStatus('wait','ODA Status','Select a destination country.'); return; }
   selectedCountry=country;
@@ -289,6 +367,335 @@ document.addEventListener('click',e=>{
 });
 </script>
 
+<script>
+/* ===== Bulk ODA check: read .xlsx/.csv, add "ODA Location" column, download .xlsx =====
+   Runs fully in the browser (no libraries, works offline). */
+(() => {
+  const STATUS_HEADER = 'ODA Location';
+
+  /* ---------- Country name matching (file names → ODA list names) ---------- */
+  const ckey = v => String(v ?? '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
+  const COUNTRY_ALIASES = {
+    'U.S.A': ['United States', 'United States of America', 'US', 'America'],
+    'U.A.E': ['United Arab Emirates', 'AE', 'Emirates'],
+    'Korea, South': ['South Korea', 'Korea', 'Republic of Korea', 'Korea Republic of', 'KR'],
+    'United Kingdom': ['UK', 'GB', 'Great Britain', 'England', 'Scotland', 'Wales', 'Northern Ireland'],
+    'Russia': ['Russian Federation', 'RU'],
+    'Vietnam': ['Viet Nam', 'VN'],
+    'Taiwan': ['Taiwan Province of China', 'Chinese Taipei', 'TW'],
+    'Hong Kong': ['Hong Kong SAR', 'Hong Kong SAR China', 'HK'],
+    'Slovak Republic': ['Slovakia', 'SK'],
+    'Bosnia-Herzegovina': ['Bosnia and Herzegovina', 'Bosnia', 'BA'],
+    'Palestinian Territory': ['Palestine', 'State of Palestine', 'PS'],
+    'Moldova': ['Republic of Moldova', 'MD'],
+    'Bolivia': ['Plurinational State of Bolivia', 'BO'],
+    'Venezuela': ['Bolivarian Republic of Venezuela', 'VE'],
+    'Tanzania': ['United Republic of Tanzania', 'TZ'],
+    'St. Lucia': ['Saint Lucia', 'LC'],
+    'St. Vincent': ['Saint Vincent', 'Saint Vincent and the Grenadines', 'St Vincent and the Grenadines', 'VC'],
+    'Sint Maarten': ['Sint Maarten (Dutch part)', 'St Maarten', 'SX'],
+    'Saint Martin': ['Saint Martin (French part)', 'St Martin', 'MF'],
+    'Antigua': ['Antigua and Barbuda', 'AG'],
+    'Virgin Islands (U.S.)': ['US Virgin Islands', 'U.S. Virgin Islands', 'Virgin Islands US', 'VI'],
+    'British Virgin Islands': ['Virgin Islands British', 'BVI', 'VG'],
+    'Bonaire, Sint - Eustatius and Saba': ['Bonaire', 'Bonaire Sint Eustatius and Saba', 'Caribbean Netherlands', 'BQ'],
+    'Curacao': ['Curaçao', 'CW'],
+    'Turks and Caicos Islands': ['Turks and Caicos', 'TC'],
+    'Trinidad and Tobago': ['Trinidad', 'TT'],
+    'Netherlands': ['Holland', 'The Netherlands', 'NL'],
+    'Czech Republic': ['Czechia', 'CZ'],
+    'Faroe Islands': ['Faroes', 'FO'],
+    'Papua New Guinea': ['PNG', 'PG'],
+    'Cook Islands': ['CK'], 'Cayman Islands': ['KY'], 'Bahamas': ['The Bahamas', 'BS'],
+    'Albania':['AL'],'Andorra':['AD'],'Argentina':['AR'],'Australia':['AU'],'Azerbaijan':['AZ'],'Bahrain':['BH'],
+    'Belarus':['BY'],'Belize':['BZ'],'Brazil':['BR'],'Bulgaria':['BG'],'Cambodia':['KH'],'Canada':['CA'],'Chile':['CL'],
+    'China':['CN','Peoples Republic of China'],'Colombia':['CO'],'Costa Rica':['CR'],'Croatia':['HR'],'Denmark':['DK'],
+    'Dominica':['DM'],'Dominican Republic':['DO'],'Ecuador':['EC'],'El Salvador':['SV'],'French Guiana':['GF'],
+    'French Polynesia':['PF'],'Georgia':['GE'],'Germany':['DE'],'Greece':['GR'],'Greenland':['GL'],'Grenada':['GD'],
+    'Guadeloupe':['GP'],'Guyana':['GY'],'Haiti':['HT'],'Honduras':['HN'],'India':['IN'],'Indonesia':['ID'],'Ireland':['IE'],
+    'Israel':['IL'],'Italy':['IT'],'Jamaica':['JM'],'Japan':['JP'],'Kazakhstan':['KZ'],'Kuwait':['KW'],'Malaysia':['MY'],
+    'Malta':['MT'],'Martinique':['MQ'],'Mexico':['MX'],'Montenegro':['ME'],'Netherlands Antilles':['AN'],
+    'New Caledonia':['NC'],'New Zealand':['NZ'],'Nicaragua':['NI'],'Oman':['OM'],'Panama':['PA'],'Paraguay':['PY'],
+    'Peru':['PE'],'Philippines':['PH'],'Portugal':['PT'],'Qatar':['QA'],'Romania':['RO'],'Serbia':['RS'],
+    'South Africa':['ZA'],'Spain':['ES'],'Suriname':['SR'],'Sweden':['SE'],'Switzerland':['CH'],'Thailand':['TH'],
+    'Ukraine':['UA'],'Uzbekistan':['UZ'],'Vanuatu':['VU'],'Zambia':['ZM'],'Fiji':['FJ'],'France':['FR']
+  };
+  const COUNTRY_INDEX = {};
+  ODA_COUNTRIES.forEach(c => { COUNTRY_INDEX[ckey(c)] = c; });
+  Object.entries(COUNTRY_ALIASES).forEach(([c, list]) => {
+    if (!ODA_COUNTRIES.includes(c)) return;
+    list.forEach(a => { const k = ckey(a); if (!(k in COUNTRY_INDEX)) COUNTRY_INDEX[k] = c; });
+  });
+  const odaCountry = v => COUNTRY_INDEX[ckey(v)] || '';
+
+  /* ---------- ODA decision for one shipment ---------- */
+  function odaStatus(countryRaw, postalRaw, cityRaw) {
+    const country = odaCountry(countryRaw);
+    if (!trim(countryRaw)) return 'No data';
+    if (!country) return 'No';                       // country has no ODA areas at all
+    const rows = rowsForCountry(country);
+    const mode = modeFor(country);
+    const postal = postalForCountry(country, postalRaw);
+    const city = trim(cityRaw);
+    const byPostal = () => !!postal && rows.some(r => postalOK(postal, r[2], r[3]));
+    const byCity = () => !!city && rows.some(r => cityOK(city, r[1]));
+    if (mode === 'postal') return !postal ? 'No data' : (byPostal() ? 'Yes' : 'No');
+    if (mode === 'city') return !city ? 'No data' : (byCity() ? 'Yes' : 'No');
+    if (mode === 'both') return (!postal && !city) ? 'No data' : ((byPostal() || byCity()) ? 'Yes' : 'No');
+    return 'No';
+  }
+
+  /* ---------- ZIP reading ---------- */
+  async function inflateRaw(bytes) {
+    if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot open .xlsx files. Please update it, or save the file as .csv and try again.');
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  async function unzip(buf) {
+    const u8 = new Uint8Array(buf), dv = new DataView(buf);
+    let eocd = -1;
+    for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('This does not look like a valid .xlsx file.');
+    const count = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
+    const entries = {}, dec = new TextDecoder();
+    for (let n = 0; n < count; n++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+      const nlen = dv.getUint16(p + 28, true), elen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+      const off = dv.getUint32(p + 42, true);
+      const name = dec.decode(u8.subarray(p + 46, p + 46 + nlen));
+      entries[name.replace(/^\/+/, '')] = { method, csize, off };
+      p += 46 + nlen + elen + clen;
+    }
+    return async name => {
+      const e = entries[name];
+      if (!e) return null;
+      const start = e.off + 30 + dv.getUint16(e.off + 26, true) + dv.getUint16(e.off + 28, true);
+      const data = u8.subarray(start, start + e.csize);
+      const out = e.method === 0 ? data : await inflateRaw(data);
+      return dec.decode(out);
+    };
+  }
+
+  /* ---------- XLSX → rows ---------- */
+  const xml = s => new DOMParser().parseFromString(s, 'application/xml');
+  const tags = (node, name) => Array.from(node.getElementsByTagNameNS('*', name));
+  const colIndex = ref => { let n = 0; for (const ch of ref.replace(/\d+/g, '')) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
+  const textOf = node => tags(node, 't').filter(t => !t.parentNode || t.parentNode.localName !== 'rPh').map(t => t.textContent).join('');
+
+  async function readXlsx(buf) {
+    const get = await unzip(buf);
+    let sheetPath = 'xl/worksheets/sheet1.xml';
+    const wbXml = await get('xl/workbook.xml'), relXml = await get('xl/_rels/workbook.xml.rels');
+    if (wbXml && relXml) {
+      const firstSheet = tags(xml(wbXml), 'sheet')[0];
+      const rid = firstSheet && (firstSheet.getAttribute('r:id') || firstSheet.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id'));
+      const rel = tags(xml(relXml), 'Relationship').find(r => r.getAttribute('Id') === rid);
+      if (rel) {
+        const t = rel.getAttribute('Target');
+        sheetPath = t.startsWith('/') ? t.slice(1) : ('xl/' + t).replace(/\/\.\//g, '/');
+      }
+    }
+    const sstXml = await get('xl/sharedStrings.xml');
+    const shared = sstXml ? tags(xml(sstXml), 'si').map(textOf) : [];
+    const sheetXml = await get(sheetPath);
+    if (!sheetXml) throw new Error('Could not find the first sheet in this Excel file.');
+    const rows = [];
+    tags(xml(sheetXml), 'row').forEach((rowEl, ri) => {
+      const rIdx = rowEl.getAttribute('r') ? Number(rowEl.getAttribute('r')) - 1 : ri;
+      const row = [];
+      let next = 0;
+      tags(rowEl, 'c').forEach(c => {
+        const ref = c.getAttribute('r'); const ci = ref ? colIndex(ref) : next; next = ci + 1;
+        const t = c.getAttribute('t'); const vEl = tags(c, 'v')[0]; const v = vEl ? vEl.textContent : '';
+        let val;
+        if (t === 's') val = shared[Number(v)] ?? '';
+        else if (t === 'inlineStr') val = textOf(c);
+        else if (t === 'b') val = v === '1' ? 'TRUE' : 'FALSE';
+        else if (t === 'str' || t === 'e') val = v;
+        else val = v === '' ? '' : (isFinite(Number(v)) ? Number(v) : v);
+        row[ci] = val;
+      });
+      rows[rIdx] = row;
+    });
+    return Array.from(rows, r => Array.from(r || [], v => v ?? ''));
+  }
+
+  /* ---------- CSV → rows ---------- */
+  function readCsv(text) {
+    text = text.replace(/^﻿/, '');
+    const firstLine = text.split(/\r?\n/)[0] || '';
+    const delim = [',', ';', '\t'].map(d => [d, firstLine.split(d).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) {
+        if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === delim) { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += ch;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+
+  /* ---------- rows → XLSX (uncompressed zip) ---------- */
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  function zip(files) {
+    const enc = new TextEncoder(), parts = [], central = []; let offset = 0;
+    files.forEach(([name, content]) => {
+      const nb = enc.encode(name), data = enc.encode(content), crc = crc32(data);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+      lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+      lh.setUint16(26, nb.length, true);
+      parts.push(new Uint8Array(lh.buffer), nb, data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+      ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+      ch.setUint16(28, nb.length, true); ch.setUint32(42, offset, true);
+      central.push(new Uint8Array(ch.buffer), nb);
+      offset += 30 + nb.length + data.length;
+    });
+    const csize = central.reduce((s, a) => s + a.length, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, csize, true); end.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+  const xesc = v => String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+  const colName = i => { let s = ''; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+
+  function buildXlsx(rows, statusCol) {
+    const width = Math.max(...rows.map(r => r.length));
+    const widths = Array.from({ length: width }, (_, c) => Math.min(45, Math.max(10, ...rows.slice(0, 500).map(r => String(r[c] ?? '').length + 2))));
+    const sheetRows = rows.map((r, ri) => {
+      const cells = r.map((v, ci) => {
+        if (v === '' || v == null) return '';
+        const ref = colName(ci) + (ri + 1);
+        let s = ri === 0 ? ' s="2"' : '';
+        if (ri > 0 && ci === statusCol) s = v === 'Yes' ? ' s="3"' : v === 'No' ? ' s="4"' : '';
+        if (typeof v === 'number' && ri > 0) return `<c r="${ref}"${s || (Number.isInteger(v) ? ' s="1"' : '')}><v>${v}</v></c>`;
+        return `<c r="${ref}" t="inlineStr"${s}><is><t xml:space="preserve">${xesc(v)}</t></is></c>`;
+      }).join('');
+      return `<row r="${ri + 1}">${cells}</row>`;
+    }).join('');
+    const last = colName(width - 1) + rows.length;
+    const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:${last}"/></worksheet>`;
+    const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FF006100"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FF9C0006"/><name val="Calibri"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF4D148C"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFC6EFCE"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFC7CE"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="1" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center"/></xf><xf numFmtId="0" fontId="3" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+    return zip([
+      ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`],
+      ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+      ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="ODA Check" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'ODA Check'!$A$1:$${last.replace(/(\d+)$/, '$$$1')}</definedName></definedNames></workbook>`],
+      ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+      ['xl/worksheets/sheet1.xml', sheet],
+      ['xl/styles.xml', styles]
+    ]);
+  }
+
+  /* ---------- Column detection ---------- */
+  const findCol = (headers, patterns) => {
+    for (const re of patterns) { const i = headers.findIndex(h => re.test(h)); if (i >= 0) return i; }
+    return -1;
+  };
+  function detectColumns(headerRow) {
+    const h = headerRow.map(v => low(v).replace(/[_\-.]+/g, ' '));
+    return {
+      country: findCol(h, [/^country name$/, /^(dest(ination)?|recipient|consignee|shipto|ship to)?\s*country( name)?$/, /country/]),
+      postal: findCol(h, [/^(dest(ination)?|recipient|consignee|ship to)?\s*(postal|post|zip|pin)\s*(code)?$/, /postal|post\s*code|postcode|zip|pin\s*code/]),
+      city: findCol(h, [/^(dest(ination)?|recipient|consignee|ship to)?\s*city( name)?$/, /city|town/])
+    };
+  }
+
+  /* ---------- Page switching (#bulk) ---------- */
+  const route = () => { document.body.classList.toggle('bulk-mode', location.hash === '#bulk'); window.scrollTo(0, 0); };
+  window.addEventListener('hashchange', route); route();
+  let openedFromApp = false;
+  $('openBulk').addEventListener('click', () => { openedFromApp = true; location.hash = 'bulk'; });
+  $('bulkBack').addEventListener('click', () => {
+    if (openedFromApp) { openedFromApp = false; history.back(); }
+    else { history.replaceState(null, '', location.pathname + location.search); route(); }
+  });
+
+  /* ---------- UI ---------- */
+  const fileInput = $('bulkFile'), runBtn = $('bulkRun'), msg = $('bulkMsg'), drop = $('bulkDrop');
+  let currentFile = null;
+  const say = (text, err) => { msg.textContent = text; msg.className = 'bulk-msg' + (err ? ' err' : ''); };
+  function pick(file) {
+    currentFile = file || null;
+    $('bulkFileName').textContent = file ? file.name : 'Tap to choose a file, or drop it here';
+    runBtn.disabled = !file;
+    $('bulkSummary').style.display = 'none';
+    say(file ? 'Ready. Tap “Check & Download Excel”.' : '');
+  }
+  fileInput.addEventListener('change', () => pick(fileInput.files[0]));
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) pick(f); });
+  $('bulkClear').addEventListener('click', () => { fileInput.value = ''; pick(null); });
+
+  runBtn.addEventListener('click', async () => {
+    if (!currentFile) return;
+    runBtn.disabled = true; say('Checking…');
+    try {
+      const isCsv = /\.csv$/i.test(currentFile.name) || currentFile.type === 'text/csv';
+      if (!isCsv && !/\.xlsx$/i.test(currentFile.name)) throw new Error('Please upload an .xlsx or .csv file. (Old .xls files: open in Excel and “Save As” .xlsx first.)');
+      let rows = isCsv ? readCsv(await currentFile.text()) : await readXlsx(await currentFile.arrayBuffer());
+      rows = rows.filter(r => r.some(v => trim(v) !== ''));
+      if (rows.length < 2) throw new Error('The file has no data rows under the heading row.');
+      const header = rows[0];
+      const cols = detectColumns(header);
+      const fallbackCountry = canonicalCountry($('country').value);
+      const useFallback = cols.country < 0 && rowsForCountry(fallbackCountry).length > 0;
+      if (cols.country < 0 && !useFallback) throw new Error('No “Country” column found. Add a Country column to the file, or pick a country on the ODA Checker page first to use it for every row.');
+      if (cols.postal < 0 && cols.city < 0) throw new Error('No “Postal Code” or “City” column found. The first row needs headings like Country, Postal Code, City.');
+
+      let statusCol = header.findIndex(h => low(h) === low(STATUS_HEADER));
+      if (statusCol < 0) statusCol = Math.max(...rows.map(r => r.length));
+      const width = Math.max(statusCol + 1, ...rows.map(r => r.length));
+      let yes = 0, no = 0, missing = 0;
+      const out = rows.map((r, i) => {
+        const row = Array.from({ length: width }, (_, c) => r[c] ?? '');
+        if (i === 0) { row[statusCol] = STATUS_HEADER; return row; }
+        const st = odaStatus(useFallback ? fallbackCountry : row[cols.country], cols.postal >= 0 ? row[cols.postal] : '', cols.city >= 0 ? row[cols.city] : '');
+        if (st === 'Yes') yes++; else if (st === 'No') no++; else missing++;
+        row[statusCol] = st;
+        return row;
+      });
+
+      const blob = buildXlsx(out, statusCol);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = currentFile.name.replace(/\.(xlsx|csv)$/i, '') + '_ODA_checked.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+
+      $('sumTotal').textContent = out.length - 1; $('sumYes').textContent = yes; $('sumNo').textContent = no;
+      $('bulkSummary').style.display = 'flex';
+      say('Done. Your Excel file has been downloaded.' + (missing ? ` ${missing} row(s) were missing country, postal code or city and are marked “No data”.` : '') + (useFallback ? ` Country “${fallbackCountry}” was used for every row.` : ''));
+    } catch (err) {
+      console.error(err);
+      say(err.message || 'Could not read this file.', true);
+    } finally {
+      runBtn.disabled = !currentFile;
+    }
+  });
+})();
+</script>
 <script>
 (() => {
   let deferredInstallPrompt = null;
